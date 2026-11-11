@@ -312,13 +312,28 @@ def scan():
         devices, new = state["devices"], []
         for d in devices.values():
             d["online"] = False
+        # Une même MAC peut répondre pour plusieurs IP (hôte multi-IP, macvlan,
+        # « ARP flux » Linux) : clé = MAC pour la 1re IP, MAC@IP pour les suivantes.
+        by_mac = {}
+        for ip in sorted(hosts, key=lambda x: int(ipaddress.ip_address(x))):
+            if hosts[ip]["mac"]:
+                by_mac.setdefault(hosts[ip]["mac"], []).append(ip)
         for ip, h in hosts.items():
-            key = h["mac"] or f"ip:{ip}"
+            mac = h["mac"]
+            if not mac:
+                key = f"ip:{ip}"
+            elif by_mac[mac][0] == ip:
+                key = mac
+            else:
+                key = f"{mac}@{ip}"
             d = devices.get(key)
             if d is None:
                 d = devices[key] = {"first_seen": now, "ports": [], "os": None}
                 new.append(key)
             dtype, alerts, info = classify(h["mac"], ip, dhcp)
+            if mac and len(by_mac[mac]) > 1:
+                others = ", ".join(x for x in by_mac[mac] if x != ip)
+                alerts = alerts + [f"Même MAC que {others} (hôte multi-IP)"]
             dns = h["dns"]
             d.update({
                 "ip": ip, "mac": h["mac"], "vendor": h["vendor"] or d.get("vendor"),
