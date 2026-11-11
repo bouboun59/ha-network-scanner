@@ -331,6 +331,14 @@ def scan():
             if ip in deep:
                 d["ports"], d["os"] = deep[ip]["ports"], deep[ip]["os"] or d.get("os")
 
+        if dhcp is not None:  # reclasse aussi les appareils hors ligne (dernière IP connue)
+            for d in devices.values():
+                if not d["online"] and d.get("ip"):
+                    dtype, _, info = classify(d.get("mac"), d["ip"], dhcp)
+                    d.update({"dhcp_type": dtype, "reserved_ip": info["reserved_ip"],
+                              "lease_expires": info["lease_expires"], "alerts": [],
+                              "name": d.get("name") or info["pihole_name"]})
+
         limit = datetime.now() - timedelta(days=OPT.get("forget_after_days", 60))
         for k in [k for k, d in devices.items()
                   if datetime.fromisoformat(d["last_seen"]) < limit]:

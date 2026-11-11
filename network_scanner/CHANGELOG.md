@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.0.2
+- Les appareils hors ligne sont aussi reclassés (DHCP / IP fixe) à chaque lecture réussie de Pi-hole.
+
 ## 1.0.1
 - Correctif : le capteur HA n'était pas publié et l'heure était en UTC (environnement du conteneur vidé par s6-overlay).
 - Message explicite quand le mot de passe Pi-hole manque ou est refusé.
