@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.0
+- Identification des équipements par les noms Home Assistant : correspondance MAC/IP avec les appareils HA (Shelly, Tapo, ESPHome, WLED, Reolink…), les nœuds Matter Wi-Fi (via le Matter Server) et, en secours, les traqueurs (Livebox…).
+- Tableau : nom HA + badge de l'intégration ; modèle dans le détail.
+
 ## 1.0.5
 - Colonne « Web » : lien cliquable (icône globe) vers chaque interface web détectée (http/https), aussi dans le détail.
 - Option `extra_ports` : ports testés en plus du top N (8006 Proxmox, 8123 HA…).

@@ -11,6 +11,8 @@ import time
 import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
+
+import enrich
 from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -377,6 +379,7 @@ def scan():
             log(f"Oubli de {devices[k].get('ip')} ({k})")
             del devices[k]
 
+        identify()
         state["last_scan"], state["last_error"] = now, None
         state["last_duration"] = round(time.time() - t0)
         save_db()
@@ -395,6 +398,32 @@ def scan():
 
 
 # ------------------------------------------------------------ Home Assistant
+def identify():
+    """Noms issus de HA (Shelly, Tapo, ESPHome…) et du Matter Server (Matter Wi-Fi)."""
+    if not OPT.get("ha_names", True):
+        return
+    ha_devices, mnodes = [], []
+    if TOKEN:
+        try:
+            ha_devices = http_json("POST", f"{SUPERVISOR}/template", {"template": enrich.HA_TEMPLATE},
+                                   headers={"Authorization": f"Bearer {TOKEN}"}, timeout=60) or []
+        except Exception as e:  # noqa: BLE001
+            log(f"Lecture des appareils HA impossible : {e}")
+    if OPT.get("matter_server_url"):
+        try:
+            mnodes = enrich.matter_nodes(OPT["matter_server_url"])
+        except Exception as e:  # noqa: BLE001
+            log(f"Matter Server injoignable : {e}")
+    by_mac, by_ip = enrich.build_index(ha_devices, mnodes)
+    n = enrich.apply(state["devices"], by_mac, by_ip)
+    log(f"Identification : {n}/{len(state['devices'])} équipements nommés "
+        f"({len(ha_devices)} appareils HA, {len(mnodes)} nœuds Matter IP)")
+
+
+def display_name(d):
+    return d.get("label") or d.get("ha_name") or d.get("name") or ""
+
+
 def push_sensor():
     devs = sorted(state["devices"].values(), key=ip_key)
     attrs = {
@@ -405,7 +434,7 @@ def push_sensor():
         "dhcp_reserve": sum(d["dhcp_type"] == "DHCP réservé" for d in devs),
         "ip_fixe": sum(d["dhcp_type"] == "IP fixe" for d in devs),
         "alertes": sum(bool(d.get("alerts")) for d in devs),
-        "devices": [{"ip": d["ip"], "mac": d["mac"], "name": d.get("name") or "",
+        "devices": [{"ip": d["ip"], "mac": d["mac"], "name": display_name(d),
                      "vendor": d.get("vendor") or "", "dhcp": d["dhcp_type"],
                      "online": "🟢" if d["online"] else "⚪",
                      "last_seen": d["last_seen"][:16].replace("T", " ")} for d in devs],
@@ -418,7 +447,7 @@ def push_sensor():
 
 
 def notify_new(devs):
-    lines = [f"- **{d.get('name') or '?'}** — {d['ip']} — {d.get('mac') or '?'} "
+    lines = [f"- **{display_name(d) or '?'}** — {d['ip']} — {d.get('mac') or '?'} "
              f"({d.get('vendor') or 'fabricant inconnu'}) — {d['dhcp_type']}" for d in devs]
     try:
         ha_api("POST", "/services/persistent_notification/create", {
@@ -497,7 +526,11 @@ def main():
         f"accès HA : {'OK' if TOKEN else 'ABSENT'}")
     log(f"Network Scanner démarré — réseau {OPT['network']}, scan quotidien à {OPT['scan_time']}")
     if state["devices"]:
-        push_sensor()
+        def _boot():
+            identify()
+            save_db()
+            push_sensor()
+        threading.Thread(target=_boot, daemon=True).start()
     else:
         threading.Thread(target=scan, daemon=True).start()  # premier inventaire
     threading.Thread(target=scheduler, daemon=True).start()

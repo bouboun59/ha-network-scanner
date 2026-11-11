@@ -46,6 +46,9 @@
   .grid{display:grid;grid-template-columns:max-content 1fr;gap:3px 14px;font-size:12px}
   .grid dt{color:var(--mut)} .grid dd{margin:0}
   .err{color:var(--warn);padding:0 14px}
+  .tag{font-size:10px;padding:0 5px;border-radius:4px;margin-left:5px;background:#24395a;color:var(--mut);vertical-align:1px}
+  .tag.d-matter{background:#2b2350;color:#c4a8ff} .tag.d-shelly,.tag.d-tapo{background:#173a52;color:#7cc4ff}
+  .tag.d-esphome,.tag.d-wled{background:#123d34;color:#6be3b8} .tag.d-livebox,.tag.d-device_tracker{background:#3a2a14;color:#ffb366}
 </style>
 </head>
 <body>
@@ -76,7 +79,7 @@
 <script>
 const COLS = [["online",""],["name","Nom"],["ip","IP"],["web","Web"],["mac","MAC"],["vendor","Fabricant"],
   ["dhcp_type","Attribution"],["os","OS"],["ports","Ports"],["last_seen","Vu"],["alerts","⚠"]];
-const CSV_COLS = [["online","En ligne"],["name","Nom"],["dns","DNS"],["ip","IP"],["mac","MAC"],["vendor","Fabricant"],
+const CSV_COLS = [["online","En ligne"],["label","Nom"],["ha_name","Nom HA"],["ha_domain","Intégration"],["ha_model","Modèle"],["name","Nom Pi-hole/DNS"],["dns","DNS"],["ip","IP"],["mac","MAC"],["vendor","Fabricant"],
   ["dhcp_type","Attribution"],["reserved_ip","IP réservée"],["lease_expires","Fin du bail"],["os","OS"],
   ["ports","Ports"],["first_seen","1re détection"],["last_seen","Dernière vue"],["alerts","Alertes"]];
 let data = {devices: []}, sortKey = "ip", sortDir = 1;
@@ -145,7 +148,7 @@ function filtered() {
   return data.devices.filter(d =>
     (!t || d.dhcp_type === t) &&
     (!st || (st === "on" && d.online) || (st === "off" && !d.online) || (st === "warn" && d.alerts?.length)) &&
-    (!q || [d.name, d.dns, d.ip, d.mac, d.vendor, d.os, (d.ports || []).join(" "), d.dhcp_type]
+    (!q || [d.label, d.ha_name, d.ha_domain, d.ha_model, d.name, d.dns, d.ip, d.mac, d.vendor, d.os, (d.ports || []).join(" "), d.dhcp_type]
             .join(" ").toLowerCase().includes(q)));
 }
 function sortVal(d, k) {
@@ -154,13 +157,16 @@ function sortVal(d, k) {
   if (k === "ports" || k === "alerts") return -(d[k] || []).length;
   if (k === "web") return -webLinks(d).length;
   if (k === "last_seen") return -new Date(d.last_seen || 0);
+  if (k === "name") return String(d.label || d.name || "").toLowerCase();
   return String(d[k] ?? "").toLowerCase();
 }
 
 function detail(d) {
   const row = (k, v) => v ? `<dt>${k}</dt><dd>${v}</dd>` : "";
   return `<tr class="detail"><td colspan="${COLS.length}"><dl class="grid">
-    ${row("Nom DNS", esc(d.dns))}${row("Fabricant", esc(d.vendor))}
+    ${row("Nom Home Assistant", d.ha_name ? esc(d.ha_name) + ` <span class="tag d-${esc(d.ha_domain)}">${esc(d.ha_domain)}</span>` : "")}
+    ${row("Modèle", esc(d.ha_model))}
+    ${row("Nom Pi-hole / DNS", esc([d.name, d.dns].filter(Boolean).join(" · ")))}${row("Fabricant (MAC)", esc(d.vendor))}
     ${row("Attribution", esc(d.dhcp_type) + (d.reserved_ip ? " — réservé " + esc(d.reserved_ip) : "") +
           (d.lease_expires ? " — bail jusqu'au " + esc(fmt(d.lease_expires) || d.lease_expires) : ""))}
     ${row("OS probable", esc(d.os))}
@@ -196,11 +202,11 @@ function render() {
     const portTxt = ports.length ? ports.map(p => p.split("/")[0]).join(", ") : "";
     return `<tr class="row ${d.online ? "" : "off"}" data-k="${esc(k)}">
       <td><span class="dot ${d.online ? "on" : ""}" title="${d.online ? "En ligne" : "Hors ligne"}"></span></td>
-      <td><span class="ell" style="--w:150px" title="${esc(d.dns || d.name)}">${esc(d.name) || '<span class="mut">—</span>'}</span></td>
+      <td><span class="ell" style="--w:190px" title="${esc([d.label, d.ha_model, d.dns].filter(Boolean).join(" · "))}">${esc(d.label || d.name) || '<span class="mut">—</span>'}</span>${d.ha_domain ? `<span class="tag d-${esc(d.ha_domain)}">${esc(d.ha_domain)}</span>` : ""}</td>
       <td class="mono">${esc(d.ip)}</td>
       <td>${webLinks(d).map(linkHtml).join("")}</td>
       <td class="mono mut">${esc(d.mac)}</td>
-      <td><span class="ell" style="--w:130px" title="${esc(d.vendor)}">${esc(shortVendor(d.vendor))}</span></td>
+      <td><span class="ell" style="--w:130px" title="${esc(d.vendor || d.ha_model)}">${esc(shortVendor(d.vendor) || d.ha_model || "")}</span></td>
       <td>${badge(d.dhcp_type)}</td>
       <td><span class="ell" style="--w:140px" title="${esc(d.os)}">${esc(shortOS(d.os))}</span></td>
       <td><span class="ell mono" style="--w:150px" title="${esc(ports.join(", "))}">${esc(portTxt)}</span></td>

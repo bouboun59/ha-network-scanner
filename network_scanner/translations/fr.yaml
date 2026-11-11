@@ -23,6 +23,12 @@ configuration:
   extra_ports:
     name: Ports supplémentaires
     description: Ports testés en plus du top N (ex. 8006 Proxmox, 8123 Home Assistant), séparés par des virgules.
+  ha_names:
+    name: Noms Home Assistant
+    description: Identifie les équipements avec les noms des appareils HA (Shelly, Tapo, ESPHome, Matter…).
+  matter_server_url:
+    name: URL du Matter Server
+    description: WebSocket du Matter Server, pour nommer les appareils Matter en Wi-Fi (vide = désactivé).
   notify_new_devices:
     name: Notifier les nouveaux appareils
     description: Crée une notification persistante dans HA à chaque nouvel appareil.
