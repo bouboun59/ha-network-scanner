@@ -8,6 +8,7 @@ import ssl
 import subprocess
 import threading
 import time
+import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
@@ -79,6 +80,7 @@ def http_json(method, url, data=None, headers=None, timeout=20):
 
 def ha_api(method, path, data=None):
     if not TOKEN:
+        log("SUPERVISOR_TOKEN absent : impossible de publier vers Home Assistant")
         return None
     return http_json(method, f"{SUPERVISOR}{path}", data,
                      headers={"Authorization": f"Bearer {TOKEN}"})
@@ -291,6 +293,11 @@ def scan():
             dhcp = pihole_dhcp()
             state["dhcp"] = {k: dhcp[k] for k in ("active", "start", "end")}
             log(f"Pi-hole : {len(dhcp['leases'])} baux, {len(dhcp['reservations'])} réservations")
+        except urllib.error.HTTPError as e:
+            hint = (" — renseigner pihole_password (mot de passe d'application Pi-hole)"
+                    if e.code == 401 and not OPT.get("pihole_password")
+                    else " — mot de passe refusé" if e.code == 401 else "")
+            log(f"Pi-hole : HTTP {e.code}{hint}")
         except Exception as e:  # noqa: BLE001
             log(f"Pi-hole injoignable : {e}")
 
@@ -446,6 +453,8 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     load_db()
+    log(f"Fuseau horaire : {os.environ.get('TZ', 'non défini')} — "
+        f"accès HA : {'OK' if TOKEN else 'ABSENT'}")
     log(f"Network Scanner démarré — réseau {OPT['network']}, scan quotidien à {OPT['scan_time']}")
     if state["devices"]:
         push_sensor()

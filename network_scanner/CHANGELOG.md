@@ -1,4 +1,8 @@
 # Changelog
 
+## 1.0.1
+- Correctif : le capteur HA n'était pas publié et l'heure était en UTC (environnement du conteneur vidé par s6-overlay).
+- Message explicite quand le mot de passe Pi-hole manque ou est refusé.
+
 ## 1.0.0
 - Première version : scan nmap quotidien, croisement DHCP Pi-hole v6, panneau ingress, capteur HA, notifications.
