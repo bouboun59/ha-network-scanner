@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inventaire réseau</title>
+<style>
+  :root{--bg:#0f1b2d;--bg2:#16263d;--line:#24395a;--txt:#e6edf6;--mut:#8ea3bf;--acc:#ff8c1a;
+        --ok:#3ecf8e;--dyn:#4ea1ff;--res:#b48cff;--fix:#ffb347;--warn:#ff5d5d}
+  *{box-sizing:border-box}
+  body{margin:0;background:linear-gradient(160deg,#0b1424,#13233a);color:var(--txt);
+       font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;min-height:100vh}
+  header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:16px}
+  h1{margin:0;font-size:20px} h1 span{color:var(--acc)}
+  .meta{color:var(--mut);font-size:12px}
+  .cards{display:flex;flex-wrap:wrap;gap:10px;padding:0 16px}
+  .card{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:10px 14px;min-width:120px}
+  .card b{display:block;font-size:22px} .card small{color:var(--mut)}
+  .bar{display:flex;flex-wrap:wrap;gap:8px;padding:14px 16px}
+  input,select,button{background:var(--bg2);color:var(--txt);border:1px solid var(--line);
+       border-radius:8px;padding:7px 10px;font:inherit}
+  input[type=search]{flex:1;min-width:180px}
+  button{cursor:pointer} button.pri{background:var(--acc);border-color:var(--acc);color:#1a1000;font-weight:600}
+  button:disabled{opacity:.6;cursor:wait}
+  .wrap{overflow-x:auto;padding:0 16px 24px}
+  table{width:100%;border-collapse:collapse;background:var(--bg2);border-radius:10px;overflow:hidden}
+  th,td{padding:7px 9px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top;white-space:nowrap}
+  th{position:sticky;top:0;background:#1b2e4a;cursor:pointer;user-select:none;font-weight:600}
+  th.sorted{color:var(--acc)}
+  tr.off td{opacity:.55}
+  td.ports{white-space:normal;max-width:260px;font-size:12px;color:var(--mut)}
+  td.alerts{white-space:normal;color:var(--warn);font-size:12px;max-width:240px}
+  .mono{font-family:ui-monospace,Menlo,monospace;font-size:12px}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--mut)}
+  .dot.on{background:var(--ok)}
+  .badge{padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;border:1px solid}
+  .b-dyn{color:var(--dyn);border-color:var(--dyn)} .b-res{color:var(--res);border-color:var(--res)}
+  .b-fix{color:var(--fix);border-color:var(--fix)} .b-unk{color:var(--mut);border-color:var(--mut)}
+  .err{color:var(--warn);padding:0 16px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Inventaire <span>réseau</span></h1>
+    <div class="meta" id="meta">Chargement…</div>
+  </div>
+  <div style="display:flex;gap:8px">
+    <button id="csv">Export CSV</button>
+    <button id="scan" class="pri">Scanner maintenant</button>
+  </div>
+</header>
+<div class="cards" id="cards"></div>
+<div class="err" id="err"></div>
+<div class="bar">
+  <input type="search" id="q" placeholder="Rechercher (nom, IP, MAC, fabricant, port…)">
+  <select id="type">
+    <option value="">Toutes attributions</option>
+    <option>DHCP dynamique</option><option>DHCP réservé</option><option>IP fixe</option>
+  </select>
+  <select id="st">
+    <option value="">Tous</option><option value="on">En ligne</option>
+    <option value="off">Hors ligne</option><option value="warn">Avec alerte</option>
+  </select>
+</div>
+<div class="wrap"><table><thead id="th"></thead><tbody id="tb"></tbody></table></div>
+<script>
+const COLS = [
+  ["online","●"],["name","Nom"],["ip","IP"],["mac","MAC"],["vendor","Fabricant"],
+  ["dhcp_type","Attribution"],["reserved_ip","IP réservée"],["lease_expires","Fin du bail"],
+  ["ports","Ports ouverts"],["os","OS probable"],["first_seen","1re détection"],
+  ["last_seen","Dernière vue"],["alerts","Alertes"]];
+let data = {devices: []}, sortKey = "ip", sortDir = 1;
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const ipNum = ip => (ip || "0.0.0.0").split(".").reduce((a, b) => a * 256 + (+b || 0), 0);
+const fmt = s => s ? s.slice(0, 16).replace("T", " ") : "";
+const badge = t => {
+  const c = t === "DHCP dynamique" ? "b-dyn" : t === "DHCP réservé" ? "b-res" : t === "IP fixe" ? "b-fix" : "b-unk";
+  return `<span class="badge ${c}">${esc(t)}</span>`;
+};
+
+async function load() {
+  try {
+    const r = await fetch("api/devices", {cache: "no-store"});
+    data = await r.json();
+    $("err").textContent = data.last_error ? "Dernière erreur : " + data.last_error : "";
+  } catch (e) { $("err").textContent = "API injoignable : " + e; }
+  render();
+  $("scan").disabled = !!data.scanning;
+  $("scan").textContent = data.scanning ? "Scan en cours…" : "Scanner maintenant";
+  if (data.scanning) setTimeout(load, 3000);
+}
+
+function filtered() {
+  const q = $("q").value.toLowerCase(), t = $("type").value, st = $("st").value;
+  return data.devices.filter(d =>
+    (!t || d.dhcp_type === t) &&
+    (!st || (st === "on" && d.online) || (st === "off" && !d.online) || (st === "warn" && d.alerts?.length)) &&
+    (!q || [d.name, d.dns, d.ip, d.mac, d.vendor, d.os, (d.ports || []).join(" "), d.dhcp_type]
+            .join(" ").toLowerCase().includes(q)));
+}
+
+function sortVal(d, k) {
+  if (k === "ip" || k === "reserved_ip") return ipNum(d[k]);
+  if (k === "online") return d.online ? 0 : 1;
+  if (k === "ports" || k === "alerts") return (d[k] || []).length;
+  return String(d[k] ?? "").toLowerCase();
+}
+
+function render() {
+  const devs = data.devices, dh = data.dhcp || {};
+  const n = f => devs.filter(f).length;
+  $("meta").textContent = `Réseau ${data.options?.network ?? ""} · scan quotidien à ${data.options?.scan_time ?? ""} · ` +
+    `dernier scan ${fmt(data.last_scan) || "—"}${data.last_duration != null ? ` (${data.last_duration} s)` : ""}` +
+    (dh.start ? ` · plage DHCP Pi-hole ${dh.start} → ${dh.end}` : "");
+  $("cards").innerHTML = [
+    [n(d => d.online), "En ligne"], [devs.length, "Connus"],
+    [n(d => d.dhcp_type === "DHCP dynamique"), "DHCP dynamique"],
+    [n(d => d.dhcp_type === "DHCP réservé"), "DHCP réservé"],
+    [n(d => d.dhcp_type === "IP fixe"), "IP fixe"], [n(d => d.alerts?.length), "Alertes"]
+  ].map(([v, l]) => `<div class="card"><b>${v}</b><small>${l}</small></div>`).join("");
+  $("th").innerHTML = "<tr>" + COLS.map(([k, l]) =>
+    `<th data-k="${k}" class="${k === sortKey ? "sorted" : ""}">${l}${k === sortKey ? (sortDir > 0 ? " ▲" : " ▼") : ""}</th>`).join("") + "</tr>";
+  const rows = filtered().sort((a, b) => {
+    const x = sortVal(a, sortKey), y = sortVal(b, sortKey);
+    return (x > y ? 1 : x < y ? -1 : ipNum(a.ip) - ipNum(b.ip)) * sortDir;
+  });
+  $("tb").innerHTML = rows.map(d => `<tr class="${d.online ? "" : "off"}">
+    <td><span class="dot ${d.online ? "on" : ""}" title="${d.online ? "En ligne" : "Hors ligne"}"></span></td>
+    <td title="${esc(d.dns)}">${esc(d.name)}</td>
+    <td class="mono">${esc(d.ip)}</td><td class="mono">${esc(d.mac)}</td>
+    <td>${esc(d.vendor)}</td><td>${badge(d.dhcp_type)}</td>
+    <td class="mono">${esc(d.reserved_ip)}</td><td>${esc(fmt(d.lease_expires) || d.lease_expires)}</td>
+    <td class="ports">${esc((d.ports || []).join(", "))}</td><td>${esc(d.os)}</td>
+    <td>${fmt(d.first_seen)}</td><td>${fmt(d.last_seen)}</td>
+    <td class="alerts">${esc((d.alerts || []).join(" · "))}</td></tr>`).join("") ||
+    `<tr><td colspan="${COLS.length}" style="text-align:center;color:var(--mut)">Aucun équipement</td></tr>`;
+}
+
+$("th").addEventListener("click", e => {
+  const k = e.target.closest("th")?.dataset.k; if (!k) return;
+  sortDir = k === sortKey ? -sortDir : 1; sortKey = k; render();
+});
+["q", "type", "st"].forEach(id => $(id).addEventListener("input", render));
+$("scan").onclick = async () => {
+  $("scan").disabled = true;
+  await fetch("api/scan", {method: "POST"}).catch(() => {});
+  setTimeout(load, 1500);
+};
+$("csv").onclick = () => {
+  const cell = v => `"${String(Array.isArray(v) ? v.join(" ") : v ?? "").replace(/"/g, '""')}"`;
+  const csv = [COLS.map(c => c[1]).join(";"),
+    ...filtered().map(d => COLS.map(([k]) => cell(k === "online" ? (d.online ? "oui" : "non") : d[k])).join(";"))].join("\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob(["﻿" + csv], {type: "text/csv"}));
+  a.download = `inventaire-reseau-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+};
+load(); setInterval(() => { if (!data.scanning) load(); }, 60000);
+</script>
+</body>
+</html>

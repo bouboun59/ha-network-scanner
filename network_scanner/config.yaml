@@ -1,0 +1,40 @@
+name: Network Scanner
+version: "1.0.0"
+slug: network_scanner
+description: Inventaire réseau quotidien (nmap) croisé avec le DHCP Pi-hole v6
+url: https://github.com/bouboun59/ha-network-scanner
+arch:
+  - amd64
+  - aarch64
+init: false
+startup: application
+boot: auto
+host_network: true
+privileged:
+  - NET_ADMIN
+  - NET_RAW
+homeassistant_api: true
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:lan
+panel_title: Réseau
+options:
+  network: 192.168.1.0/24
+  scan_time: "03:00"
+  dns_server: 192.168.1.2
+  pihole_url: http://192.168.1.2
+  pihole_password: ""
+  deep_scan: true
+  top_ports: 100
+  notify_new_devices: true
+  forget_after_days: 60
+schema:
+  network: str
+  scan_time: match(^([01]\d|2[0-3]):[0-5]\d$)
+  dns_server: str?
+  pihole_url: url
+  pihole_password: password?
+  deep_scan: bool
+  top_ports: int(1,1000)
+  notify_new_devices: bool
+  forget_after_days: int(1,3650)

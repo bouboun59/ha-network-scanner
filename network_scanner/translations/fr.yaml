@@ -1,0 +1,28 @@
+configuration:
+  network:
+    name: Réseau à scanner
+    description: Sous-réseau en notation CIDR (ex. 192.168.1.0/24).
+  scan_time:
+    name: Heure du scan quotidien
+    description: Format HH:MM, heure locale de Home Assistant.
+  dns_server:
+    name: Serveur DNS
+    description: Utilisé par nmap pour la résolution inverse des noms (Pi-hole).
+  pihole_url:
+    name: URL Pi-hole
+    description: Adresse de l'interface Pi-hole v6 (ex. http://192.168.1.2).
+  pihole_password:
+    name: Mot de passe Pi-hole
+    description: Mot de passe d'application Pi-hole (Paramètres > Web interface / API > App password).
+  deep_scan:
+    name: Scan approfondi
+    description: Ports ouverts et détection d'OS (plus long, recommandé la nuit).
+  top_ports:
+    name: Nombre de ports
+    description: Nombre de ports TCP les plus courants testés en scan approfondi.
+  notify_new_devices:
+    name: Notifier les nouveaux appareils
+    description: Crée une notification persistante dans HA à chaque nouvel appareil.
+  forget_after_days:
+    name: Oubli après (jours)
+    description: Un appareil hors ligne depuis plus longtemps est retiré de la liste.
