@@ -20,6 +20,9 @@ configuration:
   top_ports:
     name: Nombre de ports
     description: Nombre de ports TCP les plus courants testés en scan approfondi.
+  extra_ports:
+    name: Ports supplémentaires
+    description: Ports testés en plus du top N (ex. 8006 Proxmox, 8123 Home Assistant), séparés par des virgules.
   notify_new_devices:
     name: Notifier les nouveaux appareils
     description: Crée une notification persistante dans HA à chaque nouvel appareil.

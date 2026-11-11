@@ -1,5 +1,5 @@
 name: Network Scanner
-version: "1.0.4"
+version: "1.0.5"
 slug: network_scanner
 description: Inventaire réseau quotidien (nmap) croisé avec le DHCP Pi-hole v6
 url: https://github.com/bouboun59/ha-network-scanner
@@ -26,6 +26,7 @@ options:
   pihole_password: ""
   deep_scan: true
   top_ports: 100
+  extra_ports: "8006,8123,8443,9443,3000,8081,8086,9000"
   notify_new_devices: true
   forget_after_days: 60
 schema:
@@ -36,5 +37,6 @@ schema:
   pihole_password: password?
   deep_scan: bool
   top_ports: int(1,1000)
+  extra_ports: str?
   notify_new_devices: bool
   forget_after_days: int(1,3650)

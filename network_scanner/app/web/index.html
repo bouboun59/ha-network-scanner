@@ -39,6 +39,9 @@
   .b-dyn{color:var(--dyn);border-color:var(--dyn)} .b-res{color:var(--res);border-color:var(--res)}
   .b-fix{color:var(--fix);border-color:var(--fix)} .b-unk{color:var(--mut);border-color:var(--mut)}
   .warn{color:var(--warn);font-weight:700}
+  a.web{display:inline-flex;align-items:center;gap:2px;color:var(--dyn);text-decoration:none;margin-right:6px;font-size:11px}
+  a.web:hover{color:var(--acc)} a.web svg{width:15px;height:15px}
+  a.web.tls{color:var(--ok)}
   tr.detail td{white-space:normal;background:#122139;padding:8px 12px 10px 30px}
   .grid{display:grid;grid-template-columns:max-content 1fr;gap:3px 14px;font-size:12px}
   .grid dt{color:var(--mut)} .grid dd{margin:0}
@@ -71,7 +74,7 @@
 </div>
 <div class="wrap"><table><thead id="th"></thead><tbody id="tb"></tbody></table></div>
 <script>
-const COLS = [["online",""],["name","Nom"],["ip","IP"],["mac","MAC"],["vendor","Fabricant"],
+const COLS = [["online",""],["name","Nom"],["ip","IP"],["web","Web"],["mac","MAC"],["vendor","Fabricant"],
   ["dhcp_type","Attribution"],["os","OS"],["ports","Ports"],["last_seen","Vu"],["alerts","⚠"]];
 const CSV_COLS = [["online","En ligne"],["name","Nom"],["dns","DNS"],["ip","IP"],["mac","MAC"],["vendor","Fabricant"],
   ["dhcp_type","Attribution"],["reserved_ip","IP réservée"],["lease_expires","Fin du bail"],["os","OS"],
@@ -83,6 +86,25 @@ const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;
 const ipNum = ip => (ip || "0.0.0.0").split(".").reduce((a, b) => a * 256 + (+b || 0), 0);
 const fmt = s => s ? s.slice(0, 16).replace("T", " ") : "";
 const keyOf = d => (d.mac || "") + "@" + d.ip;
+const WEB_PORTS = {80: "http", 443: "https", 8080: "http", 8443: "https", 8000: "http", 8006: "https",
+  8123: "http", 9443: "https", 5000: "http", 3000: "http", 8081: "http", 8888: "http", 9000: "http"};
+function webLinks(d) {
+  const out = [];
+  for (const p of d.ports || []) {
+    const [num, svc = ""] = p.split("/"), port = +num, s = svc.toLowerCase();
+    if (s.includes("squid") || s.includes("rtsp")) continue;
+    let scheme = null;
+    if (s.includes("https") || s.includes("ssl")) scheme = "https";
+    else if (s.includes("http")) scheme = "http";
+    else if (WEB_PORTS[port] && !["upnp", "sun-answerbook"].includes(s)) scheme = WEB_PORTS[port];
+    if (!scheme) continue;
+    const def = (scheme === "http" && port === 80) || (scheme === "https" && port === 443);
+    out.push({url: `${scheme}://${d.ip}${def ? "" : ":" + port}/`, port, scheme});
+  }
+  return out;
+}
+const ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>';
+const linkHtml = l => `<a class="web ${l.scheme === "https" ? "tls" : ""}" href="${esc(l.url)}" target="_blank" rel="noopener noreferrer" title="Ouvrir ${esc(l.url)}">${ICON}${(l.port === 80 || l.port === 443) ? "" : l.port}</a>`;
 
 function shortOS(os) {
   if (!os) return "";
@@ -130,6 +152,7 @@ function sortVal(d, k) {
   if (k === "ip") return ipNum(d.ip);
   if (k === "online") return d.online ? 0 : 1;
   if (k === "ports" || k === "alerts") return -(d[k] || []).length;
+  if (k === "web") return -webLinks(d).length;
   if (k === "last_seen") return -new Date(d.last_seen || 0);
   return String(d[k] ?? "").toLowerCase();
 }
@@ -142,6 +165,7 @@ function detail(d) {
           (d.lease_expires ? " — bail jusqu'au " + esc(fmt(d.lease_expires) || d.lease_expires) : ""))}
     ${row("OS probable", esc(d.os))}
     ${row("Ports ouverts", esc((d.ports || []).join(", ")))}
+    ${row("Interfaces web", webLinks(d).map(l => `<a class="web ${l.scheme === "https" ? "tls" : ""}" href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">${ICON} ${esc(l.url)}</a>`).join(" "))}
     ${row("1re détection", fmt(d.first_seen))}${row("Dernière vue", fmt(d.last_seen))}
     ${row("Alertes", `<span class="warn">${esc((d.alerts || []).join(" · "))}</span>`)}
   </dl></td></tr>`;
@@ -174,6 +198,7 @@ function render() {
       <td><span class="dot ${d.online ? "on" : ""}" title="${d.online ? "En ligne" : "Hors ligne"}"></span></td>
       <td><span class="ell" style="--w:150px" title="${esc(d.dns || d.name)}">${esc(d.name) || '<span class="mut">—</span>'}</span></td>
       <td class="mono">${esc(d.ip)}</td>
+      <td>${webLinks(d).map(linkHtml).join("")}</td>
       <td class="mono mut">${esc(d.mac)}</td>
       <td><span class="ell" style="--w:130px" title="${esc(d.vendor)}">${esc(shortVendor(d.vendor))}</span></td>
       <td>${badge(d.dhcp_type)}</td>
@@ -190,6 +215,7 @@ $("th").addEventListener("click", e => {
   sortDir = k === sortKey ? -sortDir : 1; sortKey = k; render();
 });
 $("tb").addEventListener("click", e => {
+  if (e.target.closest("a")) return;
   const k = e.target.closest("tr.row")?.dataset.k; if (k == null) return;
   open.has(k) ? open.delete(k) : open.add(k); render();
 });

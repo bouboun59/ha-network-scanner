@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.5
+- Colonne « Web » : lien cliquable (icône globe) vers chaque interface web détectée (http/https), aussi dans le détail.
+- Option `extra_ports` : ports testés en plus du top N (8006 Proxmox, 8123 HA…).
+
 ## 1.0.4
 - Tableau compacté : une ligne par équipement, OS/fabricant abrégés, ports en numéros, « Vu » relatif ; détail complet au clic sur la ligne ; cartes compteurs cliquables comme filtres.
 

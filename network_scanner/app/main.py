@@ -262,6 +262,23 @@ def deep_scan(ips):
         osm = h.find("os/osmatch")
         res[ip] = {"ports": ports,
                    "os": f"{osm.get('name')} ({osm.get('accuracy')}%)" if osm is not None else None}
+    extra = str(OPT.get("extra_ports") or "").replace(" ", "")
+    if extra:  # ports hors du top N (ex. 8006 Proxmox, 8123 HA)
+        try:
+            root2 = run_nmap(["-sS", "-T4", "-n", "-p", extra] + ips, timeout=1800)
+            for h in root2.findall("host"):
+                ip, _, _ = host_addresses(h)
+                cur = res.setdefault(ip, {"ports": [], "os": None})["ports"]
+                known = {x.split("/")[0] for x in cur}
+                for p in h.findall("ports/port"):
+                    pst = p.find("state")
+                    if pst is None or pst.get("state") != "open" or p.get("portid") in known:
+                        continue
+                    svc = p.find("service")
+                    cur.append(f"{p.get('portid')}/{svc.get('name') if svc is not None else '?'}")
+                cur.sort(key=lambda x: int(x.split("/")[0]))
+        except Exception as e:  # noqa: BLE001
+            log(f"Scan des ports supplémentaires en échec : {e}")
     return res
 
 
